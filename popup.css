@@ -1,0 +1,181 @@
+* {
+  box-sizing: border-box;
+}
+body#GAExtension {
+  font-family: sans-serif;
+  padding: 10px 20px 20px;
+  width: 380px;
+  font-size: 16px;
+}
+.toggle {
+  margin-bottom: 10px;
+}
+.accordion-toggle {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  user-select: none;
+  margin-top: 10px;
+}
+.chevron {
+  margin-right: 5px;
+  transition: transform 0.2s ease;
+  position: absolute;
+  right: 30px;
+  top: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+.accordion {
+  margin-left: 20px;
+  display: none;
+  width: 100%;
+  border: 1px solid #e7e7e7;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 0;
+}
+.accordion#customElementBox {
+  border: none;
+  padding: 10px;
+}
+.accordion input {
+  width: 100%;
+  padding: 5px;
+  margin-top: 5px;
+  box-sizing: border-box;
+  border: 1px solid #c1c0c0;
+  border-radius: 6px;
+  height: 40px;
+}
+.input-group,
+.add-save-group {
+  display: flex;
+  flex-flow: row nowrap;
+  gap: 10px;
+  margin-bottom: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+.add-save-group {
+  margin-top: 20px;
+}
+.input-group button,
+.add-save-group button,
+input[type="checkbox"] {
+  cursor: pointer;
+}
+.input-group input[type="text"]:not(#crawlerTopSelector) {
+  min-width: 60%;
+  flex: 0 1 60%;
+  height: 30px;
+}
+.input-group input[type="color"] {
+  min-width: 40px;
+  flex: 0 1 40px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.input-group input.prioritySelector {
+  min-width: 40px;
+  flex: 0 1 40px;
+  height: 30px;
+}
+.input-group button.remove-field {
+  min-width: auto;
+  flex: 0 1 auto;
+}
+.add-field {
+  border-radius: 50px;
+  border: 0px;
+  background: #e0e0e0;
+  display: flex;
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.5em;
+  padding: 0;
+  box-shadow: 0px 6px 7px #635d5d26;
+  border: 1px solid #c6c6c6;
+}
+.remove-field {
+  background-color: #efefef;
+  color: black;
+  border: none;
+  padding: 2px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 0;
+  height: 20px;
+  width: 20px;
+}
+button.save {
+  border-radius: 50px;
+  border: 0px;
+  height: 30px;
+  background: #e0e0e0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.1em;
+  padding: 0;
+  box-shadow: 0px 6px 7px #635d5d26;
+  min-width: 150px;
+  padding: 8px 6px;
+  border: 1px solid #c6c6c6;
+  transition: all 0.2s;
+}
+button.save.saving {
+  background-color: rgb(135, 206, 141);
+}
+.wait {
+  cursor: wait !important;
+}
+.add-field:hover,
+.save:hover {
+  background: #dfd8d8;
+}
+/* Click Crawler */
+input#crawlerTopSelector {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid;
+  height: 30px;
+  padding-left: 5px;
+}
+button#runClickCrawlerBtn {
+  outline: 1px solid transparent;
+  background: #fccc12;
+  color: black;
+  border-radius: 8px;
+  text-transform: uppercase;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 16px;
+  line-height: normal;
+  padding: 6px 14px;
+}
+/* Text */
+.fs-sm {
+  font-size: 0.8rem;
+}
+.fs-md {
+  font-size: 1.1rem;
+}
+.fs-lg {
+  font-size: 1.5rem;
+}
+.text-center {
+  text-align: center;
+}
+.rel {
+  position: relative;
+}

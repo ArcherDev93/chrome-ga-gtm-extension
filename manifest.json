@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "GA4/GTM Utility",
+  "version": "4.4.0",
+  "description": "Multiple Features to improve GA4/GTM UX",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://analytics.google.com/*", "https://tagmanager.google.com/*", "https://tagassistant.google.com/*", "https://dev.azure.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["https://analytics.google.com/*", "https://tagmanager.google.com/*", "https://tagassistant.google.com/*", "https://dev.azure.com/*"],
+      "js": ["sites.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://analytics.google.com/*", "https://tagmanager.google.com/*", "https://tagassistant.google.com/*", "https://dev.azure.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["crawler.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GA4/GTM Utility"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}

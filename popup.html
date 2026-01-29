@@ -1,0 +1,78 @@
+<!-- popup.html -->
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body id="GAExtension">
+    <h3 class="fs-lg text-center">Extension Settings</h3>
+    <div class="toggle">
+      <label><input type="checkbox" id="updateTitle" /> GA/GTM Title Update</label>
+    </div>
+    <div class="toggle">
+      <label><input type="checkbox" id="gtmWorkspaceCSS" /> GTM Workspace CSS</label>
+    </div>
+    <div class="toggle">
+      <label><input type="checkbox" id="tagAssistantCSS" /> Tag Assistant CSS</label>
+    </div>
+    <div class="toggle rel">
+      <label><input type="checkbox" id="showButtonsLinks" class="" /> Show Buttons/Links Info</label>
+      <div class="accordion-toggle fs-sm" id="accordionToggle"><span class="chevron abs" id="chevron">&#9654;</span></div>
+      <div class="accordion" id="customElementBox">
+        <input type="text" id="customElement" placeholder="e.g. .my-button, #submit" />
+      </div>
+    </div>
+    <p class="text-center">Please refresh pages to see changes.</p>
+    <p class="text-left"><b>GA4 Explorer Report:</b></p>
+    <ol>
+      <li>Click a cell</li>
+      <li>Press "ctrl+c" or ` on your keyboard to copy</li>
+    </ol>
+
+    <!-- Click Crawler UI -->
+    <hr />
+    <h3 class="fs-md">Click Crawler (beta)</h3>
+
+    <fieldset style="border: 1px solid #e7e7e7; border-radius: 6px; padding: 10px">
+      <legend style="padding: 0 6px">Scope</legend>
+
+      <div class="toggle">
+        <label>
+          <input type="radio" name="crawlerMode" id="crawlerModeAll" value="all" checked />
+          Crawl all buttons/links
+        </label>
+      </div>
+
+      <div class="toggle">
+        <label>
+          <input type="radio" name="crawlerMode" id="crawlerModeExclude" value="exclude" />
+          Crawl all buttons/links <b>EXCEPT</b> this top-level selector
+        </label>
+      </div>
+
+      <div class="toggle">
+        <label>
+          <input type="radio" name="crawlerMode" id="crawlerModeOnly" value="only" />
+          Crawl <b>ONLY</b> this top-level selector
+        </label>
+      </div>
+
+      <div class="input-group" style="margin-top: 8px">
+        <input type="text" id="crawlerTopSelector" placeholder="e.g. header, .nav, #footer" disabled aria-label="Top-level selector for Click Crawler" />
+      </div>
+
+      <div class="add-save-group" style="margin-top: 12px">
+        <button class="save" id="runClickCrawlerBtn" title="Run Click Crawler on current tab">Run Click Crawler</button>
+      </div>
+
+      <div class="add-save-group" style="margin-top: 8px">
+        <button class="save" id="stopClickCrawlerBtn" title="Stop Click Crawler">Stop Crawler</button>
+        <button class="save" id="teardownClickCrawlerBtn" title="Restore navigation guards">Teardown</button>
+      </div>
+
+      <p class="fs-sm" id="crawlerStatus" style="margin-top: 6px; color: #666"></p>
+    </fieldset>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
