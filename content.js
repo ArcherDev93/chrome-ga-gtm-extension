@@ -54,11 +54,18 @@ window.addEventListener("load", (event) => {
         pointer-events: none;
       }
     `;
-  const locURL = window.location.href; /** Used for all URL related logic */
-  const isExplorationPage = location.hostname.includes("analytics.google.com") && location.href.includes("analysis") && location.href.includes("edit"); // If it's the Exploration page in GA4
+  const getLocURL = () => window.location.href; /** Used for all URL related logic */
+  const isExplorationRoute = () => {
+    const url = location.href;
+    const hash = location.hash || "";
+    const isMatch = location.hostname.includes("analytics.google.com") && (hash.includes("/analysis/") || hash.includes("/explore") || hash.includes("/edit/") || url.includes("analysis") || url.includes("explore") || url.includes("/edit/"));
+    CatLog(`Exploration route check: ${isMatch}`, { url, hash });
+    return isMatch;
+  };
 
   let titleUpdatesEnabled = true; // gate for any title changes
   let gaTitleIntervalId = null; // store GA4EasyTitle interval id
+  let lastAppliedTitle = "";
 
   /***********************
    * Title Element Observers (simple & direct)
@@ -68,32 +75,66 @@ window.addEventListener("load", (event) => {
   function observeTextChange(selectors, onText) {
     const sel = selectors.join(", ");
     let el = null;
+    let lastText = "";
+    let moText = null;
 
     function attach() {
-      el = document.querySelector(sel);
-      if (!el) {
+      const nextEl = document.querySelector(sel);
+      if (!nextEl) {
         // Try again shortly; GA/GTM often render late
         setTimeout(attach, 300);
         return;
       }
 
+      if (nextEl === el) return;
+
+      if (moText) moText.disconnect();
+      el = nextEl;
+      lastText = "";
+
       // Initial fire
       const initial = (el.textContent || "").trim();
       CatLog("Observer attached", { selector: sel, initial });
-      onText(initial);
+      if (initial !== lastText) {
+        lastText = initial;
+        onText(initial);
+      }
 
       // Observe text changes
-      const mo = new MutationObserver(() => {
+      moText = new MutationObserver(() => {
         const current = (el.textContent || "").trim();
+        if (current === lastText) return;
+        lastText = current;
         onText(current);
       });
-      mo.observe(el, { childList: true, characterData: true, subtree: true });
+      moText.observe(el, { childList: true, characterData: true, subtree: true });
     }
+
+    const moDom = new MutationObserver(() => {
+      if (!el || !el.isConnected) {
+        attach();
+        return;
+      }
+
+      const currentEl = document.querySelector(sel);
+      if (currentEl && currentEl !== el) attach();
+    });
+    moDom.observe(document.body, { childList: true, subtree: true });
 
     attach();
   }
 
+  function setDocumentTitle(nextTitle, source = "") {
+    const normalized = (nextTitle || "").trim();
+    if (!normalized) return;
+    if (normalized === lastAppliedTitle && normalized === document.title) return;
+    lastAppliedTitle = normalized;
+    document.title = normalized;
+    if (source) CatLog(`Set title (${source}): ${normalized}`);
+  }
+
   function updateTitle() {
+    const locURL = getLocURL();
     if (locURL.includes("analytics.google.com")) updateTitleFromGA();
     if (locURL.includes("tagmanager.google.com") && locURL.includes("workspaces")) updateTitleFromGTM();
     console.groupEnd();
@@ -105,39 +146,51 @@ window.addEventListener("load", (event) => {
     const elGA = document.querySelector(".gmp-text-name") || document.querySelector(".gmp-title-text");
     if (elGA) {
       const text = elGA.textContent.trim();
-      const parts = text.split("-");
-      if (parts.length >= 3) {
-        const newTitle = parts.slice(2).join("-").trim();
-        CatLog(`Document Title (GA): ${newTitle}`);
-        document.title = newTitle;
+      const parts = text
+        .split("-")
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      let newTitle = text;
+      if (parts.length >= 2) {
+        newTitle = parts.slice(-2).join(" - ").trim();
       }
+
+      setDocumentTitle(newTitle, "GA");
     }
+  }
+
+  const GTM_TITLE_SELECTORS = [".suite-up-text-name", '[data-test-id="workspace-name"]', '[data-test-id="container-title"]', '[data-test-id="environment-name"]'];
+
+  function getGtmTitleElement() {
+    for (const selector of GTM_TITLE_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el && (el.textContent || "").trim()) return el;
+    }
+    return null;
   }
 
   function updateTitleFromGTM() {
     if (!titleUpdatesEnabled) return; // <-- gate
     console.groupCollapsed("%c[GA4/GTM Utility] Updating document title", LOG_COLOR);
-    const elGTM = document.querySelector(".suite-up-text-name");
+    const elGTM = getGtmTitleElement();
     if (elGTM) {
       const text = elGTM.textContent.trim();
       const lowerText = text.toLowerCase();
 
       if (lowerText.includes("zone") && lowerText.includes("parts")) {
-        document.title = "PCC Zone";
-        CatLog(`Set title from GTM (PCC Zone): ${document.title}`);
+        setDocumentTitle("PCC Zone", "GTM PCC Zone");
         return;
       }
 
       if (lowerText.includes("zone") && lowerText.includes("www")) {
-        document.title = "CAT Zone";
-        CatLog(`Set title from GTM (CAT Zone): ${document.title}`);
+        setDocumentTitle("CAT Zone", "GTM CAT Zone");
         return;
       }
 
       const parts = text.split("-");
       const newTitle = parts[0].trim();
-      document.title = newTitle;
-      CatLog(`Set title from GTM: ${newTitle}`);
+      setDocumentTitle(newTitle, "GTM");
     }
   }
 
@@ -152,11 +205,12 @@ window.addEventListener("load", (event) => {
   // GTM title element(s)
   if (location.hostname.includes("tagmanager.google.com")) {
     observeTextChange([".suite-up-text-name", '[data-test-id="workspace-name"]', '[data-test-id="container-title"]', '[data-test-id="environment-name"]'], () => {
-      if (titleUpdatesEnabled && locURL.includes("workspaces")) updateTitleFromGTM();
+      if (titleUpdatesEnabled && getLocURL().includes("workspaces")) updateTitleFromGTM();
     });
   }
 
   function checkGTMWorkspacePage() {
+    const locURL = getLocURL();
     if (locURL.includes("tagmanager.google.com") && locURL.includes("workspaces")) {
       const existingStyle = document.getElementById("gtm-workspace-style");
       if (!existingStyle) {
@@ -209,6 +263,7 @@ window.addEventListener("load", (event) => {
   }
 
   function tagAssistantCSS() {
+    const locURL = getLocURL();
     if (locURL.includes("tagassistant.google.com") && locURL.includes("TAG_MANAGER")) {
       CatLog("✅ Added CSS for Tag Assistant");
       const existingStyle = document.getElementById("tag-assistant-style");
@@ -236,6 +291,23 @@ window.addEventListener("load", (event) => {
       if (toggles.tagAssistantCSS) tagAssistantCSS();
     }, 1000);
 
+    // SPA navigation watcher (pushState/replaceState/popstate)
+    const dispatchLocationChange = () => window.dispatchEvent(new Event("ga-util-location-change"));
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function () {
+      const ret = origPush.apply(this, arguments);
+      dispatchLocationChange();
+      return ret;
+    };
+    history.replaceState = function () {
+      const ret = origReplace.apply(this, arguments);
+      dispatchLocationChange();
+      return ret;
+    };
+    window.addEventListener("popstate", dispatchLocationChange);
+    window.addEventListener("ga-util-location-change", debouncedUpdate);
+
     const observer = new MutationObserver(debouncedUpdate);
     observer.observe(document.body, { childList: true, subtree: true });
 
@@ -243,27 +315,29 @@ window.addEventListener("load", (event) => {
     if (toggles.updateTitle && titleUpdatesEnabled) updateTitle();
     if (toggles.gtmWorkspaceCSS) checkGTMWorkspacePage();
     if (toggles.tagAssistantCSS) tagAssistantCSS();
-
-    // ---- STOP TITLE CHANGES AFTER 8 SECONDS ----
-    setTimeout(() => {
-      titleUpdatesEnabled = false; // stop any future title mutations
-      if (gaTitleIntervalId) {
-        clearInterval(gaTitleIntervalId); // stop GA4EasyTitle interval
-        gaTitleIntervalId = null;
-      }
-      CatLog("Title updates disabled (timeout)");
-    }, 8000);
   });
 
   /******************/
   /*Exploration Page*/
   /******************/
-  if (isExplorationPage) {
-    let lastHeaderGroup = null;
+  let lastHeaderGroup = null;
+  let explorationBound = false;
+  let explorationObserver = null;
+  let lastMousePos = { x: 0, y: 0 };
+
+  function bindExplorationCopy() {
+    if (explorationBound) return;
+    explorationBound = true;
+    CatLog("Exploration copy bindings attached");
+
+    document.addEventListener("mousemove", (event) => {
+      lastMousePos = { x: event.clientX, y: event.clientY };
+    });
 
     document.addEventListener("click", (event) => {
       const g = event.target.closest("g.header-value");
       if (g) lastHeaderGroup = g;
+      CatLog("Exploration click detected", { hasHeader: !!g, targetTag: event.target.tagName });
     });
 
     // ---- Toast helpers ----
@@ -330,16 +404,37 @@ window.addEventListener("load", (event) => {
 
     // Ctrl+C / Cmd+C or backtick to copy header values
     document.addEventListener("keydown", async (event) => {
+      const isCopyCombo = ((event.ctrlKey || event.metaKey) && (event.key?.toLowerCase() === "c" || event.code === "KeyC")) || event.key === "`";
+
+      if (isCopyCombo) {
+        CatLog("Copy key pressed", { key: event.key, code: event.code, isExplorationRoute: isExplorationRoute(), hash: location.hash });
+      }
+
+      if (!isExplorationRoute()) return;
+
       const el = event.target;
       const isEditable = el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName);
       if (isEditable) return;
 
-      const isCopyCombo = ((event.ctrlKey || event.metaKey) && (event.key?.toLowerCase() === "c" || event.code === "KeyC")) || event.key === "`";
-
       if (!isCopyCombo) return;
+
+      CatLog("Exploration copy shortcut detected", { key: event.key, code: event.code });
 
       const sel = window.getSelection?.();
       if (sel && !sel.isCollapsed) return;
+
+      if (!lastHeaderGroup || !lastHeaderGroup.isConnected) {
+        const hoverEl = document.elementFromPoint(lastMousePos.x, lastMousePos.y);
+        const hoverGroup = hoverEl ? hoverEl.closest("g.header-value") : null;
+        if (hoverGroup) lastHeaderGroup = hoverGroup;
+        CatLog("Exploration hover header lookup", { found: !!hoverGroup });
+      }
+
+      if (!lastHeaderGroup || !lastHeaderGroup.isConnected) {
+        const anyHeader = document.querySelector("g.header-value");
+        if (anyHeader) lastHeaderGroup = anyHeader;
+        CatLog("Exploration fallback header lookup", { found: !!anyHeader });
+      }
 
       if (!lastHeaderGroup) return;
 
@@ -348,6 +443,8 @@ window.addEventListener("load", (event) => {
         .join("");
 
       if (!combined) return;
+
+      CatLog("Exploration copy payload", { text: combined });
 
       event.preventDefault();
 
@@ -378,4 +475,23 @@ window.addEventListener("load", (event) => {
       }, 2200);
     });
   }
+
+  function initExplorationCopy() {
+    CatLog("Exploration init check", { routeMatch: isExplorationRoute(), hash: location.hash });
+    if (!isExplorationRoute()) return;
+    bindExplorationCopy();
+    const anyHeader = document.querySelector("g.header-value");
+    if (anyHeader) lastHeaderGroup = anyHeader;
+    CatLog("Exploration init complete", { foundHeader: !!anyHeader, totalHeaders: document.querySelectorAll("g.header-value").length });
+  }
+
+  const debouncedExplorationInit = debounce(initExplorationCopy, 400);
+  debouncedExplorationInit();
+  CatLog("Exploration init scheduled");
+
+  explorationObserver = new MutationObserver(debouncedExplorationInit);
+  explorationObserver.observe(document.body, { childList: true, subtree: true });
+  CatLog("Exploration observer active");
+
+  window.addEventListener("ga-util-location-change", debouncedExplorationInit);
 });
