@@ -64,6 +64,7 @@
     abort: false,
     pendingTimer: null,
     isRunning: false,
+    keepGuardsAfterStop: false,
     cfg: { ...defaultCfg },
     globalSeen: new Set(),
   };
@@ -288,106 +289,109 @@
 
     state.abort = false;
     state.isRunning = true;
+    state.keepGuardsAfterStop = false;
     state.globalSeen.clear();
     clearTimeout(state.pendingTimer);
 
     installNavGuards();
 
-    let parents = Array.from(document.querySelectorAll(cfg.parentSelector)).filter((el) => parentEligible(el, cfg));
-    parents = filterByScope(parents, cfg);
-    if (Number.isFinite(cfg.maxParents)) parents = parents.slice(0, cfg.maxParents);
+    try {
+      let parents = Array.from(document.querySelectorAll(cfg.parentSelector)).filter((el) => parentEligible(el, cfg));
+      parents = filterByScope(parents, cfg);
+      if (Number.isFinite(cfg.maxParents)) parents = parents.slice(0, cfg.maxParents);
 
-    log(
-      `Parents: ${parents.length} | scopeMode=${cfg.scopeMode} | topLevelSelector=${cfg.topLevelSelector || "∅"} | includeDescendants=${!!cfg.includeDescendants} | rescan=${cfg.rescanAfterClick}(${cfg.rescanWaitMs}ms)`,
-    );
+      log(`Parents: ${parents.length} | scopeMode=${cfg.scopeMode} | topLevelSelector=${cfg.topLevelSelector || "∅"} | includeDescendants=${!!cfg.includeDescendants} | rescan=${cfg.rescanAfterClick}(${cfg.rescanWaitMs}ms)`);
 
-    for (let p = 0; p < parents.length; p++) {
-      if (shouldAbort()) break;
-
-      const parent = parents[p];
-      if (!document.contains(parent)) continue;
-
-      await bringIntoView(parent, cfg);
-      if (shouldAbort()) break;
-
-      const targets = buildTargetsForParent(parent, cfg);
-      if (!targets.length) continue;
-
-      // Track which targets we already queued within this parent loop to prevent local re-queue dupes
-      const localQueued = new Set(targets);
-
-      for (let i = 0; i < targets.length; i++) {
+      for (let p = 0; p < parents.length; p++) {
         if (shouldAbort()) break;
 
-        const el = targets[i];
-        if (!document.contains(el)) continue;
-        if (state.globalSeen.has(el)) continue;
-        if (!isActionable(el) && !(cfg.clickZeroSizeParents && el === parent && el.tagName === "A")) continue;
+        const parent = parents[p];
+        if (!document.contains(parent)) continue;
 
-        flash(el, cfg);
+        await bringIntoView(parent, cfg);
+        if (shouldAbort()) break;
 
-        const delay = rand(cfg.minDelayMs, cfg.maxDelayMs);
-        for (let waited = 0; waited < delay; waited += 50) {
+        const targets = buildTargetsForParent(parent, cfg);
+        if (!targets.length) continue;
+
+        // Track which targets we already queued within this parent loop to prevent local re-queue dupes
+        const localQueued = new Set(targets);
+
+        for (let i = 0; i < targets.length; i++) {
           if (shouldAbort()) break;
-          // eslint-disable-next-line no-await-in-loop
-          await sleep(Math.min(50, delay - waited));
-        }
-        if (shouldAbort()) break;
 
-        try {
-          synthClick(el);
-          state.globalSeen.add(el);
-        } catch (err) {
-          warn("click failed on element:", el, err);
-        }
+          const el = targets[i];
+          if (!document.contains(el)) continue;
+          if (state.globalSeen.has(el)) continue;
+          if (!isActionable(el) && !(cfg.clickZeroSizeParents && el === parent && el.tagName === "A")) continue;
 
-        // ---------------------- RESCAN AFTER CLICK (dropdowns) ----------------------
-        const clickedIsParent = el === parent;
-        const shouldRescan = cfg.rescanAfterClick === "each" || (cfg.rescanAfterClick === "parent" && clickedIsParent);
+          flash(el, cfg);
 
-        if (shouldRescan) {
-          // Wait for UI to update (dropdown/accordion animations)
-          const wait = Math.max(0, Number.isFinite(cfg.rescanWaitMs) ? cfg.rescanWaitMs : 0);
-          for (let waited = 0; waited < wait; waited += 50) {
+          const delay = rand(cfg.minDelayMs, cfg.maxDelayMs);
+          for (let waited = 0; waited < delay; waited += 50) {
             if (shouldAbort()) break;
             // eslint-disable-next-line no-await-in-loop
-            await sleep(Math.min(50, wait - waited));
+            await sleep(Math.min(50, delay - waited));
           }
           if (shouldAbort()) break;
 
-          // NEW: rescan within a container that includes siblings (e.g., the <li>)
-          const root = getRescanRoot(parent, cfg);
-
-          // IMPORTANT: limit to clickable nodes (e.g., anchors/buttons) via descendantFilter
-          let newTargets = collectTargetsWithin(root, cfg).filter((n) => !state.globalSeen.has(n) && !localQueued.has(n));
-
-          // Respect maxPerParent cap by limiting how many we add
-          if (Number.isFinite(cfg.maxPerParent)) {
-            const remaining = Math.max(0, cfg.maxPerParent - targets.length);
-            if (remaining <= 0) newTargets = [];
-            else if (newTargets.length > remaining) newTargets = newTargets.slice(0, remaining);
+          try {
+            synthClick(el);
+            state.globalSeen.add(el);
+          } catch (err) {
+            warn("click failed on element:", el, err);
           }
 
-          // Enqueue newly revealed items
-          for (const n of newTargets) {
-            targets.push(n);
-            localQueued.add(n);
+          // ---------------------- RESCAN AFTER CLICK (dropdowns) ----------------------
+          const clickedIsParent = el === parent;
+          const shouldRescan = cfg.rescanAfterClick === "each" || (cfg.rescanAfterClick === "parent" && clickedIsParent);
+
+          if (shouldRescan) {
+            // Wait for UI to update (dropdown/accordion animations)
+            const wait = Math.max(0, Number.isFinite(cfg.rescanWaitMs) ? cfg.rescanWaitMs : 0);
+            for (let waited = 0; waited < wait; waited += 50) {
+              if (shouldAbort()) break;
+              // eslint-disable-next-line no-await-in-loop
+              await sleep(Math.min(50, wait - waited));
+            }
+            if (shouldAbort()) break;
+
+            // NEW: rescan within a container that includes siblings (e.g., the <li>)
+            const root = getRescanRoot(parent, cfg);
+
+            // IMPORTANT: limit to clickable nodes (e.g., anchors/buttons) via descendantFilter
+            let newTargets = collectTargetsWithin(root, cfg).filter((n) => !state.globalSeen.has(n) && !localQueued.has(n));
+
+            // Respect maxPerParent cap by limiting how many we add
+            if (Number.isFinite(cfg.maxPerParent)) {
+              const remaining = Math.max(0, cfg.maxPerParent - targets.length);
+              if (remaining <= 0) newTargets = [];
+              else if (newTargets.length > remaining) newTargets = newTargets.slice(0, remaining);
+            }
+
+            // Enqueue newly revealed items
+            for (const n of newTargets) {
+              targets.push(n);
+              localQueued.add(n);
+            }
           }
+          // ---------------------------------------------------------------------------
         }
-        // ---------------------------------------------------------------------------
       }
+    } finally {
+      clearTimeout(state.pendingTimer);
+      state.pendingTimer = null;
+      state.isRunning = false;
+      if (!state.keepGuardsAfterStop) uninstallNavGuards();
+
+      log(state.abort ? "Aborted." : "Done.");
     }
-
-    clearTimeout(state.pendingTimer);
-    state.pendingTimer = null;
-    state.isRunning = false;
-
-    log(state.abort ? "Aborted." : "Done.");
   }
 
   // ------------------------------- Stop/Teardown ----------------------------
   function stop({ teardown = true } = {}) {
     state.abort = true;
+    state.keepGuardsAfterStop = !teardown;
     clearTimeout(state.pendingTimer);
     state.pendingTimer = null;
     try {

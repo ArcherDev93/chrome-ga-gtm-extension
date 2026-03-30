@@ -55,6 +55,22 @@ window.addEventListener("load", (event) => {
       }
     `;
   const getLocURL = () => window.location.href; /** Used for all URL related logic */
+
+  function ensureStyleTag(styleId, cssText) {
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    if (style.textContent !== cssText) {
+      style.textContent = cssText;
+    }
+
+    return style;
+  }
+
   const isExplorationRoute = () => {
     const url = location.href;
     const hash = location.hash || "";
@@ -66,6 +82,12 @@ window.addEventListener("load", (event) => {
   let titleUpdatesEnabled = true; // gate for any title changes
   let gaTitleIntervalId = null; // store GA4EasyTitle interval id
   let lastAppliedTitle = "";
+  let gtmInputClickBound = false;
+  const featureToggles = {
+    updateTitle: true,
+    gtmWorkspaceCSS: true,
+    tagAssistantCSS: true,
+  };
 
   /***********************
    * Title Element Observers (simple & direct)
@@ -212,12 +234,9 @@ window.addEventListener("load", (event) => {
   function checkGTMWorkspacePage() {
     const locURL = getLocURL();
     if (locURL.includes("tagmanager.google.com") && locURL.includes("workspaces")) {
-      const existingStyle = document.getElementById("gtm-workspace-style");
-      if (!existingStyle) {
-        const style = document.createElement("style");
-        style.id = "gtm-workspace-style";
-        style.textContent = GTMStylesheet;
-        document.head.appendChild(style);
+      const hadStyle = !!document.getElementById("gtm-workspace-style");
+      ensureStyleTag("gtm-workspace-style", GTMStylesheet);
+      if (!hadStyle) {
         CatLog("✅ Added CSS for GTM Workspace");
       }
     }
@@ -226,52 +245,51 @@ window.addEventListener("load", (event) => {
   }
 
   function enhanceGTMInputInteraction() {
-    const inputs = document.querySelectorAll("input.gtmPredicateExpression, input.ctui-text-input");
+    if (gtmInputClickBound) return;
+    gtmInputClickBound = true;
 
-    inputs.forEach((input) => {
-      input.addEventListener("click", () => {
-        const value = input.value || "";
-        if (value.length <= 30) return; // Only proceed if value is longer than 30 characters
+    document.addEventListener("click", (event) => {
+      const input = event.target.closest("input.gtmPredicateExpression, input.ctui-text-input");
+      if (!input) return;
 
-        const parent = input.closest("div"); // Adjust this selector if needed
-        if (!parent) return;
+      const value = input.value || "";
+      if (value.length <= 30) return; // Only proceed if value is longer than 30 characters
 
-        // Avoid duplicating textarea
-        if (parent.nextSibling && parent.nextSibling.classList?.contains("gtm-textarea-wrapper")) return;
+      const parent = input.closest("div");
+      if (!parent || !parent.parentNode) return;
 
-        const wrapper = document.createElement("div");
-        wrapper.className = "gtm-textarea-wrapper";
-        wrapper.style.marginTop = "8px";
+      // Avoid duplicating textarea
+      if (parent.nextSibling && parent.nextSibling.classList?.contains("gtm-textarea-wrapper")) return;
 
-        const textarea = document.createElement("textarea");
-        textarea.value = value;
-        textarea.style.width = "100%";
-        textarea.rows = 4;
-        textarea.style.fontSize = "1.2rem";
-        textarea.style.padding = "6px";
-        textarea.style.boxSizing = "border-box";
+      const wrapper = document.createElement("div");
+      wrapper.className = "gtm-textarea-wrapper";
+      wrapper.style.marginTop = "8px";
 
-        textarea.addEventListener("blur", () => {
-          input.value = textarea.value;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        });
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.style.width = "100%";
+      textarea.rows = 4;
+      textarea.style.fontSize = "1.2rem";
+      textarea.style.padding = "6px";
+      textarea.style.boxSizing = "border-box";
 
-        wrapper.appendChild(textarea);
-        parent.parentNode.insertBefore(wrapper, parent.nextSibling);
+      textarea.addEventListener("blur", () => {
+        input.value = textarea.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
       });
+
+      wrapper.appendChild(textarea);
+      parent.parentNode.insertBefore(wrapper, parent.nextSibling);
     });
   }
 
   function tagAssistantCSS() {
     const locURL = getLocURL();
     if (locURL.includes("tagassistant.google.com") && locURL.includes("TAG_MANAGER")) {
-      CatLog("✅ Added CSS for Tag Assistant");
-      const existingStyle = document.getElementById("tag-assistant-style");
-      if (!existingStyle) {
-        const style = document.createElement("style");
-        style.id = "tag-assistant-style";
-        style.textContent = TAGStylesheet;
-        document.head.appendChild(style);
+      const hadStyle = !!document.getElementById("tag-assistant-style");
+      ensureStyleTag("tag-assistant-style", TAGStylesheet);
+      if (!hadStyle) {
+        CatLog("✅ Added CSS for Tag Assistant");
       }
     }
   }
@@ -283,13 +301,17 @@ window.addEventListener("load", (event) => {
     };
   }
 
-  chrome.storage.sync.get(["updateTitle", "gtmWorkspaceCSS", "tagAssistantCSS"], (toggles) => {
-    const debouncedUpdate = debounce(() => {
-      // stop changing titles when the flag is off
-      if (toggles.updateTitle && titleUpdatesEnabled) updateTitle();
-      if (toggles.gtmWorkspaceCSS) checkGTMWorkspacePage();
-      if (toggles.tagAssistantCSS) tagAssistantCSS();
-    }, 1000);
+  const debouncedUpdate = debounce(() => {
+    // stop changing titles when the flag is off
+    if (featureToggles.updateTitle && titleUpdatesEnabled) updateTitle();
+    if (featureToggles.gtmWorkspaceCSS) checkGTMWorkspacePage();
+    if (featureToggles.tagAssistantCSS) tagAssistantCSS();
+  }, 1000);
+
+  chrome.storage.sync.get(["updateTitle", "gtmWorkspaceCSS", "tagAssistantCSS"], (storedToggles) => {
+    for (const key of Object.keys(featureToggles)) {
+      if (typeof storedToggles[key] === "boolean") featureToggles[key] = storedToggles[key];
+    }
 
     // SPA navigation watcher (pushState/replaceState/popstate)
     const dispatchLocationChange = () => window.dispatchEvent(new Event("ga-util-location-change"));
@@ -312,9 +334,21 @@ window.addEventListener("load", (event) => {
     observer.observe(document.body, { childList: true, subtree: true });
 
     // Initial run
-    if (toggles.updateTitle && titleUpdatesEnabled) updateTitle();
-    if (toggles.gtmWorkspaceCSS) checkGTMWorkspacePage();
-    if (toggles.tagAssistantCSS) tagAssistantCSS();
+    debouncedUpdate();
+  });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "sync") return;
+
+    let didToggleChange = false;
+    for (const key of Object.keys(featureToggles)) {
+      if (changes[key] && typeof changes[key].newValue === "boolean") {
+        featureToggles[key] = changes[key].newValue;
+        didToggleChange = true;
+      }
+    }
+
+    if (didToggleChange) debouncedUpdate();
   });
 
   /******************/
@@ -343,9 +377,9 @@ window.addEventListener("load", (event) => {
     // ---- Toast helpers ----
     function ensureToastUI() {
       if (!document.getElementById("ga-toast-style")) {
-        const style = document.createElement("style");
-        style.id = "ga-toast-style";
-        style.textContent = `
+        ensureStyleTag(
+          "ga-toast-style",
+          `
         .ga-toast-container {
           position: fixed;
           right: 16px;
@@ -370,8 +404,8 @@ window.addEventListener("load", (event) => {
           transition: opacity 120ms ease, transform 120ms ease;
         }
         .ga-toast.show { opacity: 1; transform: translateY(0); }
-      `;
-        document.head.appendChild(style);
+      `,
+        );
       }
       if (!document.getElementById("ga-toast-container")) {
         const container = document.createElement("div");

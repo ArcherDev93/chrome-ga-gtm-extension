@@ -11,7 +11,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["http://*/*", "https://*/*"],
       "exclude_matches": ["https://analytics.google.com/*", "https://tagmanager.google.com/*", "https://tagassistant.google.com/*", "https://dev.azure.com/*"],
       "js": ["sites.js"],
       "run_at": "document_idle"
@@ -25,7 +25,7 @@
   "web_accessible_resources": [
     {
       "resources": ["crawler.js"],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
   "action": {
